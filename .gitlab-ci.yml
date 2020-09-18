@@ -1,0 +1,42 @@
+image: docker:latest
+
+stages:
+  - test
+  - build
+  - deploy
+
+services:
+  - docker:dind
+
+test:
+  stage: test
+  script:
+    - docker build -t antonkovalenko/react-test -f ./client/Dockerfile.dev ./client
+    - docker run -e CI=true antonkovalenko/react-test npm test
+
+build:
+  stage: build
+  script:
+    - docker build -t akovalenko/multi-client ./client
+    - docker build -t akovalenko/multi-nginx ./nginx
+    - docker build -t akovalenko/multi-server ./server
+    - docker build -t akovalenko/multi-worker ./worker
+    #Log in to the docker CLI
+    - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_ID" --password-stdin
+    #Take those images and put them to docker hub
+    - docker push akovalenko/multi-client
+    - docker push akovalenko/multi-nginx
+    - docker push akovalenko/multi-server
+    - docker push akovalenko/multi-worker
+
+deploy:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  script:
+    - apt install zip
+    - zip -r multi-docker-$CI_PIPELINE_ID.zip . -x /.git/*
+    - aws s3 cp /builds/ankovalenko/multi-docker/multi-docker-$CI_PIPELINE_ID.zip s3://elasticbeanstalk-us-east-1-201886813087/multi-docker-$CI_PIPELINE_ID/
+    - aws elasticbeanstalk create-application-version --application-name multi-docker --version-label multi-docker-$CI_PIPELINE_ID --source-bundle S3Bucket=elasticbeanstalk-us-east-1-201886813087,S3Key=multi-docker-$CI_PIPELINE_ID/multi-docker-$CI_PIPELINE_ID.zip
+    - aws elasticbeanstalk update-environment --application-name multi-docker --environment-name MultiDocker-env --version-label multi-docker-$CI_PIPELINE_ID
+  only:
+    - master
