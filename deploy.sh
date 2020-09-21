@@ -10,6 +10,7 @@ docker push akovalenko/multi-client:$SHA
 docker push akovalenko/multi-server:$SHA
 docker push akovalenko/multi-worker:$SHA
 
+
 kubectl apply -f k8s
 kubectl set image deployments/server-deployment server=akovalenko/mulpti-server:$SHA
 kubectl set image deployments/client-deployment client=akovalenko/mulpti-client:$SHA
